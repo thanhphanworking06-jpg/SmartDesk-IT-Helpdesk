@@ -1,0 +1,19 @@
+
+# Python virtual environment
+.venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Local database
+helpdesk.db
+
+# Environment variables and secrets
+.env
+
+# Testing cache
+.pytest_cache/
+
+# VS Code local settings
+.vscode/

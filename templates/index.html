@@ -1,0 +1,78 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartDesk - IT Helpdesk</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background-color: #f4f6f9;
+        }
+
+        h1 {
+            color: #234a7d;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+        }
+
+        th, td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background-color: #234a7d;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>SmartDesk</h1>
+    <p>IT Support Ticket Management System</p>
+
+    <h2>Support Tickets</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Description</th>
+                <th>Status</th>
+                <th>Priority</th>
+                <th>Created By</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            <!-- Đây là cú pháp Jinja2, công cụ Flask sử dụng để đưa dữ liệu Python vào HTML.
+                Nó có nghĩa là: Với mỗi ticket trong danh sách tickets, hãy tạo một hàng trong bảng. -->
+            {% for ticket in tickets %}
+            <tr>
+                <td>{{ ticket.id }}</td>
+                <td>{{ ticket.title }}</td> <!-- dòng này hiển thị tiêu đề của ticket -->
+                <td>{{ ticket.description }}</td>
+                <td>{{ ticket.status }}</td>
+                <td>{{ ticket.priority }}</td>
+                <td>{{ ticket.created_by }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6">No tickets found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+</body>
+</html>
