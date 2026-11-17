@@ -1,0 +1,52 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+    <title>Ticket Details - SmartDesk</title>
+</head>
+
+<body>
+
+    <!-- Website heading -->
+    <h1>SmartDesk</h1>
+    <p>IT Support Ticket Management System</p>
+
+    <!-- Ticket information -->
+    <h2>Ticket #{{ ticket.id }}</h2>
+
+    <h3>{{ ticket.title }}</h3>
+
+    <p>
+        <strong>Description:</strong>
+        {{ ticket.description }}
+    </p>
+
+    <p>
+        <strong>Status:</strong>
+        {{ ticket.status }}
+    </p>
+
+    <p>
+        <strong>Priority:</strong>
+        {{ ticket.priority }}
+    </p>
+
+    <p>
+        <strong>Created By:</strong>
+        {{ ticket.created_by }}
+    </p>
+
+    <p>
+        <strong>Created At:</strong>
+        {{ ticket.created_at }}
+    </p>
+
+    <!-- Return to dashboard -->
+    <a href="/">Back to Dashboard</a>
+
+</body>
+</html>

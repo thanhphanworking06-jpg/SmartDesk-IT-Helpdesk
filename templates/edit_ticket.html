@@ -1,0 +1,83 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+    <title>Edit Ticket - SmartDesk</title>
+</head>
+
+<body>
+
+    <!-- Website heading -->
+    <h1>SmartDesk</h1>
+    <h2>Edit Ticket #{{ ticket.id }}</h2>
+
+    <!-- Form for updating ticket information -->
+    <form method="POST">
+
+        <!-- Ticket title -->
+        <label for="title">Ticket Title:</label>
+        <input
+            type="text"
+            id="title"
+            name="title"
+            value="{{ ticket.title }}"
+            required
+        >
+
+        <br><br>
+
+        <!-- Ticket description -->
+        <label for="description">Description:</label>
+        <textarea
+            id="description"
+            name="description"
+            rows="5"
+            required
+        >{{ ticket.description }}</textarea>
+
+        <br><br>
+
+        <!-- Ticket priority -->
+        <label for="priority">Priority:</label>
+        <select id="priority" name="priority">
+            {% for option in ["Low", "Medium", "High"] %}
+            <option value="{{ option }}"
+                {% if ticket.priority == option %}selected{% endif %}>
+                {{ option }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <br><br>
+
+        <!-- Ticket status -->
+        <label for="status">Status:</label>
+        <select id="status" name="status">
+            {% for option in ["Open", "In Progress", "Resolved"] %}
+            <option value="{{ option }}"
+                {% if ticket.status == option %}selected{% endif %}>
+                {{ option }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <br><br>
+
+        <!-- Save changes -->
+        <button type="submit">Save Changes</button>
+
+    </form>
+
+    <br>
+
+    <!-- Return to ticket details -->
+    <a href="{{ url_for('ticket_detail', ticket_id=ticket.id) }}">
+        Cancel
+    </a>
+
+</body>
+</html>

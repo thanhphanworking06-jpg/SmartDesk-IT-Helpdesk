@@ -1,0 +1,63 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Ticket - SmartDesk</title>
+</head>
+
+<body>
+
+    <!-- Website heading -->
+    <h1>SmartDesk</h1>
+    <h2>Create New Ticket</h2>
+
+    <!-- Form for creating a support ticket -->
+    <form method="POST">
+
+        <!-- Ticket title -->
+        <label for="title">Ticket Title:</label>
+        <input
+            type="text"
+            id="title"
+            name="title"
+            required
+        >
+
+        <br><br>
+
+        <!-- Ticket description -->
+        <label for="description">Description:</label>
+        <textarea
+            id="description"
+            name="description"
+            rows="5"
+            required
+        ></textarea>
+
+        <br><br>
+
+        <!-- Ticket priority -->
+        <label for="priority">Priority:</label>
+        <select id="priority" name="priority">
+            <option value="Low">Low</option>
+            <option value="Medium" selected>Medium</option>
+            <option value="High">High</option>
+        </select>
+
+        <br><br>
+
+        <!-- Submit the form -->
+        <button type="submit">Create Ticket</button>
+
+    </form>
+
+    <br>
+
+    <!-- Return to homepage -->
+    <a href="/">Back to Dashboard</a>
+
+</body>
+</html>
