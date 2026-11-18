@@ -27,12 +27,26 @@ def init_db():
     # Table 1: Users
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
+            
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             email TEXT NOT NULL UNIQUE,
-            role TEXT NOT NULL
+            password_hash TEXT,
+            role TEXT NOT NULL DEFAULT 'User'
         )
     """)
+    
+    # Check existing columns in the users table
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [column["name"] for column in cursor.fetchall()]
+
+    # Add password_hash column if it does not exist
+    if "password_hash" not in columns:
+        cursor.execute("""
+            ALTER TABLE users
+            ADD COLUMN password_hash TEXT
+        """)
+
 
     # Table 2: Tickets
     cursor.execute("""

@@ -1,6 +1,14 @@
 
 # Import Flask
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, session, abort
+
+# Import password security functions
+from werkzeug.security import generate_password_hash, check_password_hash
+
+# Import other libraries
+import sqlite3
+import os
+from functools import wraps
 
 # Import database functions
 from database import get_connection, init_db
@@ -8,37 +16,93 @@ from database import get_connection, init_db
 # Create Flask application
 app = Flask(__name__)
 
+# Configure secret key for user sessions
+app.config["SECRET_KEY"] = os.environ.get("SMARTDESK_SECRET_KEY")
 
-# Homepage - display all tickets
+if not app.config["SECRET_KEY"]:
+    raise RuntimeError("SMARTDESK_SECRET_KEY is not configured")
+
+# Require users to log in before accessing protected pages
+def login_required(view_function):
+
+    @wraps(view_function)
+    def wrapper(*args, **kwargs):
+
+        # Check whether a user is logged in
+        if "user_id" not in session:
+            return redirect(url_for("login"))
+
+        # Check whether the user still exists in the database
+        connection = get_connection()
+
+        user = connection.execute(
+            "SELECT id FROM users WHERE id = ?",
+            (session["user_id"],)
+        ).fetchone()
+
+        connection.close()
+
+        # Clear invalid sessions
+        if user is None:
+            session.clear()
+            return redirect(url_for("login"))
+
+        # Continue to the requested page
+        return view_function(*args, **kwargs)
+
+    return wrapper
+
+# Display the ticket dashboard
 @app.route("/")
+@login_required
 def home():
 
-    # Connect to SQLite database
+    # Get the logged-in user's ID
+    user_id = session["user_id"]
+
+    # Connect to SQLite
     connection = get_connection()
 
-    # Get tickets and the names of their creators
-    tickets = connection.execute("""
-        SELECT
-            tickets.id,
-            tickets.title,
-            tickets.description,
-            tickets.status,
-            tickets.priority,
-            users.name AS created_by
-        FROM tickets
-        JOIN users ON tickets.user_id = users.id
-        ORDER BY tickets.id DESC
-    """).fetchall()
+    # Read the user's current role from the database
+    user = connection.execute("""
+        SELECT role
+        FROM users
+        WHERE id = ?
+    """, (user_id,)).fetchone()
+
+    if user is None:
+        connection.close()
+        session.clear()
+        return redirect(url_for("login"))
+
+    # Admin can see all tickets
+    if user["role"] == "Admin":
+
+        tickets = connection.execute("""
+            SELECT *
+            FROM tickets
+            ORDER BY id DESC
+        """).fetchall()
+
+    # Regular users can only see their own tickets
+    else:
+
+        tickets = connection.execute("""
+            SELECT *
+            FROM tickets
+            WHERE user_id = ?
+            ORDER BY id DESC
+        """, (user_id,)).fetchall()
 
     # Close database connection
     connection.close()
 
-    # Send tickets to HTML template
+    # Display the dashboard
     return render_template("index.html", tickets=tickets)
-
 
 # Display and process the Create Ticket form
 @app.route("/tickets/new", methods=["GET", "POST"])
+@login_required
 def create_ticket():
 
     # Check if the user submitted the form
@@ -56,10 +120,13 @@ def create_ticket():
         if priority not in ["Low", "Medium", "High"]:
             return "Invalid priority.", 400
 
+        # Get the currently logged-in user's ID
+        user_id = session["user_id"]
+
         # Connect to SQLite
         connection = get_connection()
 
-        # Save the new ticket
+        # Save the new ticket with its actual owner
         connection.execute("""
             INSERT INTO tickets
             (title, description, status, priority, user_id)
@@ -69,7 +136,7 @@ def create_ticket():
             description,
             "Open",
             priority,
-            1
+            user_id
         ))
 
         # Save changes and close connection
@@ -85,7 +152,11 @@ def create_ticket():
 
 # Display details of a single ticket
 @app.route("/tickets/<int:ticket_id>")
+@login_required
 def ticket_detail(ticket_id):
+
+    # Get the currently logged-in user's ID
+    user_id = session["user_id"]
 
     # Connect to SQLite
     connection = get_connection()
@@ -99,18 +170,36 @@ def ticket_detail(ticket_id):
             tickets.status,
             tickets.priority,
             tickets.created_at,
+            tickets.user_id,
             users.name AS created_by
         FROM tickets
         JOIN users ON tickets.user_id = users.id
         WHERE tickets.id = ?
     """, (ticket_id,)).fetchone()
 
+    # Handle ticket not found
+    if ticket is None:
+        connection.close()
+        return "Ticket not found", 404
+
+    # Get the logged-in user's role
+    user = connection.execute("""
+        SELECT role
+        FROM users
+        WHERE id = ?
+    """, (user_id,)).fetchone()
+
     # Close database connection
     connection.close()
 
-    # Handle ticket not found
-    if ticket is None:
-        return "Ticket not found", 404
+    # Handle invalid user session
+    if user is None:
+        session.clear()
+        return redirect(url_for("login"))
+
+    # Check ticket ownership and admin permission
+    if ticket["user_id"] != user_id and user["role"] != "Admin":
+        abort(403)
 
     # Display ticket details
     return render_template(
@@ -118,10 +207,13 @@ def ticket_detail(ticket_id):
         ticket=ticket
     )
 
-
 # Display and process the Edit Ticket form
-@app.route("/tickets/<int:ticket_id>/edit", methods=["GET", "POST"])
+@app.route("/ticket/<int:ticket_id>/edit", methods=["GET", "POST"])
+@login_required
 def edit_ticket(ticket_id):
+
+    # Get the currently logged-in user's ID
+    user_id = session["user_id"]
 
     # Connect to SQLite
     connection = get_connection()
@@ -136,6 +228,24 @@ def edit_ticket(ticket_id):
     if ticket is None:
         connection.close()
         return "Ticket not found", 404
+
+    # Get the logged-in user's role
+    user = connection.execute("""
+        SELECT role
+        FROM users
+        WHERE id = ?
+    """, (user_id,)).fetchone()
+
+    # Handle invalid user session
+    if user is None:
+        connection.close()
+        session.clear()
+        return redirect(url_for("login"))
+
+    # Check ticket ownership and admin permission
+    if ticket["user_id"] != user_id and user["role"] != "Admin":
+        connection.close()
+        abort(403)
 
     # Process the submitted form
     if request.method == "POST":
@@ -192,16 +302,22 @@ def edit_ticket(ticket_id):
         ticket=ticket
     )
 
+
+
 # Delete a ticket
 @app.route("/tickets/<int:ticket_id>/delete", methods=["POST"])
+@login_required
 def delete_ticket(ticket_id):
+
+    # Get the currently logged-in user's ID
+    user_id = session["user_id"]
 
     # Connect to SQLite
     connection = get_connection()
 
-    # Check if the ticket exists
+    # Check if the ticket exists and get its owner
     ticket = connection.execute(
-        "SELECT id FROM tickets WHERE id = ?",
+        "SELECT id, user_id FROM tickets WHERE id = ?",
         (ticket_id,)
     ).fetchone()
 
@@ -209,6 +325,24 @@ def delete_ticket(ticket_id):
     if ticket is None:
         connection.close()
         return "Ticket not found", 404
+
+    # Get the logged-in user's role
+    user = connection.execute("""
+        SELECT role
+        FROM users
+        WHERE id = ?
+    """, (user_id,)).fetchone()
+
+    # Handle invalid user session
+    if user is None:
+        connection.close()
+        session.clear()
+        return redirect(url_for("login"))
+
+    # Check ticket ownership and admin permission
+    if ticket["user_id"] != user_id and user["role"] != "Admin":
+        connection.close()
+        abort(403)
 
     # Delete the selected ticket
     connection.execute(
@@ -222,6 +356,129 @@ def delete_ticket(ticket_id):
 
     # Return to the dashboard
     return redirect(url_for("home"))
+
+# Register a new user
+@app.route("/register", methods=["GET", "POST"])
+def register():
+
+    # Process the registration form
+    if request.method == "POST":
+
+        # Get information from the form
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        # Check required fields
+        if not name or not email or not password:
+            return "All fields are required.", 400
+
+        # Check password length
+        if len(password) < 8:
+            return "Password must be at least 8 characters.", 400
+
+        # Check matching passwords
+        if password != confirm_password:
+            return "Passwords do not match.", 400
+
+        # Hash the password before storing it
+        password_hash = generate_password_hash(password)
+
+        # Connect to SQLite
+        connection = get_connection()
+
+        try:
+            # Insert a new user with the default User role
+            connection.execute("""
+                INSERT INTO users
+                (name, email, password_hash, role)
+                VALUES (?, ?, ?, ?)
+            """, (
+                name,
+                email,
+                password_hash,
+                "User"
+            ))
+
+            # Save the new account
+            connection.commit()
+
+        except sqlite3.IntegrityError:
+            # Handle duplicate email addresses
+            return "This email is already registered.", 409
+
+        finally:
+            # Always close the database connection
+            connection.close()
+
+        # Show success message
+        return "Registration successful! Login will be added next."
+
+    # Display the registration form
+    return render_template("register.html")
+
+
+# Login an existing user
+@app.route("/login", methods=["GET", "POST"])
+def login():
+
+    # Check if the login form was submitted
+    if request.method == "POST":
+
+        # Get email and password from the form
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+
+        # Validate required fields
+        if not email or not password:
+            return "Email and password are required.", 400
+
+        # Connect to SQLite
+        connection = get_connection()
+
+        # Find the user by email
+        user = connection.execute("""
+            SELECT id, name, email, password_hash, role
+            FROM users
+            WHERE email = ?
+        """, (email,)).fetchone()
+
+        connection.close()
+
+        # Check the email and password
+        if (
+            user is None
+            or not user["password_hash"]
+            or not check_password_hash(
+                user["password_hash"], password
+            )
+        ):
+            return "Invalid email or password.", 401
+
+        # Clear previous session information
+        session.clear()
+
+        # Save logged-in user information
+        session["user_id"] = user["id"]
+        session["user_name"] = user["name"]
+        session["role"] = user["role"]
+
+        # Redirect to Dashboard
+        return redirect(url_for("home"))
+
+    # Display the Login form
+    return render_template("login.html")
+
+# Log out the current user
+@app.route("/logout", methods=["POST"])
+def logout():
+
+    # Remove all user information from the session
+    session.clear()
+
+    # Redirect to the Login page
+    return redirect(url_for("login"))
 
 # Start Flask application
 if __name__ == "__main__":

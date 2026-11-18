@@ -338,8 +338,9 @@ By the end of Day 1, the application could display support tickets stored in SQL
 - Test CRUD operations.
 - Commit and push changes to GitHub.
 
-## SmartDesk – Day 2 Development Notes
-## Ticket Management System – CRUD Operations
+## Day 2 Development Notes
+
+### Ticket Management System – CRUD Operations
 
 ### 1. Day 2 Objectives
 
@@ -612,3 +613,391 @@ These features form the foundation of the SmartDesk ticket management system.
 - Authentication and authorization.
 - Protect ticket operations from unauthorized access.
 - Add CSRF protection for state-changing requests.
+
+## Day 3 – User Authentication & Authorization
+
+## 1. Objectives
+
+The goal of Day 3 was to implement user authentication and role-based authorization for the SmartDesk IT Support Ticket Management System.
+
+By the end of Day 3, the application supports:
+
+- User registration with password hashing.
+- User login and logout.
+- Session-based authentication.
+- Login protection for ticket management routes.
+- Ticket ownership.
+- Role-based access control (User and Admin).
+- Authorization checks for viewing, editing, and deleting tickets.
+- HTTP 403 Forbidden responses for unauthorized access.
+
+---
+
+## 2. Technologies Used
+
+| Technology | Purpose |
+|---|---|
+| Python | Backend application logic |
+| Flask | Web framework and routing |
+| SQLite | Database for users and tickets |
+| Werkzeug | Secure password hashing and verification |
+| Flask Session | Maintaining login state |
+| Jinja2 | Conditional HTML rendering |
+| HTML | Registration, login, and ticket forms |
+| Git & GitHub | Version control |
+
+---
+
+## 3. Database Migration
+
+### File: `database.py`
+
+The `users` table was updated to support authentication.
+
+Important fields:
+
+- `id`: Unique user identifier.
+- `name`: User's full name.
+- `email`: Unique email address.
+- `password_hash`: Stores the hashed password.
+- `role`: Determines the user's permissions.
+
+The application uses `PRAGMA table_info(users)` to inspect the existing table and `ALTER TABLE` to add the `password_hash` column when necessary.
+
+**Key lesson:** Database migration allows an existing database structure to be updated without deleting all existing records.
+
+---
+
+## 4. User Registration
+
+### Files: `app.py`, `templates/register.html`
+
+The registration feature allows new users to create accounts.
+
+Registration process:
+
+1. The user opens `/register`.
+2. The user enters their name, email, password, and password confirmation.
+3. Flask receives the form using a POST request.
+4. The application validates the submitted data.
+5. The password is hashed using Werkzeug.
+6. The new user is inserted into SQLite with the default role `User`.
+
+Example:
+
+```python
+password_hash = generate_password_hash(password)
+```
+
+The application also checks:
+
+- Required fields are not empty.
+- Password length is at least eight characters.
+- Password and confirmation match.
+- Email addresses are unique.
+
+**Key lesson:** Never store plaintext passwords in the database.
+
+---
+
+## 5. User Login
+
+### Files: `app.py`, `templates/login.html`
+
+The login feature authenticates registered users.
+
+Login process:
+
+1. The user opens `/login`.
+2. The user enters their email and password.
+3. Flask retrieves the matching user from SQLite.
+4. Werkzeug verifies the password against the stored hash.
+5. If authentication succeeds, user information is saved in the session.
+6. The user is redirected to the Dashboard.
+
+Example:
+
+```python
+check_password_hash(user["password_hash"], password)
+```
+
+Session example:
+
+```python
+session["user_id"] = user["id"]
+session["user_name"] = user["name"]
+session["role"] = user["role"]
+```
+
+**Key lesson:** Authentication verifies who the user is.
+
+---
+
+## 6. User Logout
+
+### File: `app.py`
+
+The logout feature clears the user's session.
+
+Example:
+
+```python
+session.clear()
+```
+
+The application uses a POST route for logout and redirects the user to the Login page.
+
+**Key lesson:** Logging out removes the session information used to identify the authenticated user.
+
+---
+
+## 7. Login Protection
+
+### File: `app.py`
+
+A custom `login_required` decorator was implemented to protect application routes.
+
+Example:
+
+```python
+@app.route("/")
+@login_required
+def home():
+    ...
+```
+
+Protected routes include:
+
+- Dashboard
+- Create Ticket
+- View Ticket
+- Edit Ticket
+- Delete Ticket
+
+If the user is not authenticated, Flask redirects them to the Login page.
+
+The decorator also verifies that the user still exists in the database.
+
+**Key lesson:** A decorator allows authentication logic to be reused across multiple routes.
+
+---
+
+## 8. Ticket Ownership
+
+### File: `app.py`
+
+Each ticket is associated with the account that created it through the `user_id` column.
+
+Previously, new tickets were assigned to a hardcoded user ID.
+
+This was replaced with:
+
+```python
+user_id = session["user_id"]
+```
+
+The ticket creation SQL statement now stores the currently authenticated user's ID.
+
+**Key lesson:** Ownership links application records to specific users and is essential for access control.
+
+---
+
+## 9. Dashboard Filtering
+
+### Files: `app.py`, `templates/index.html`
+
+The Dashboard displays different ticket lists depending on the user's role.
+
+### Regular User
+
+Regular users only see tickets that belong to them.
+
+```sql
+SELECT *
+FROM tickets
+WHERE user_id = ?
+ORDER BY id DESC;
+```
+
+### Admin
+
+Administrators can see all tickets.
+
+```sql
+SELECT *
+FROM tickets
+ORDER BY id DESC;
+```
+
+**Key lesson:** Database queries can filter records according to the authenticated user's permissions.
+
+However, Dashboard filtering alone is not sufficient to secure individual ticket URLs.
+
+---
+
+## 10. Role-Based Authorization
+
+### File: `app.py`
+
+SmartDesk currently supports two roles:
+
+| Role | Permissions |
+|---|---|
+| User | Manage their own tickets |
+| Admin | Manage all tickets |
+
+The application retrieves the user's role from SQLite and checks ownership before allowing access to a ticket.
+
+Example:
+
+```python
+if ticket["user_id"] != user_id and user["role"] != "Admin":
+    abort(403)
+```
+
+This authorization check is used in:
+
+- `ticket_detail()`
+- `edit_ticket()`
+- `delete_ticket()`
+
+The Edit and Delete routes check authorization before updating or deleting records.
+
+**Key lesson:** Authorization determines what an authenticated user is allowed to do.
+
+---
+
+## 11. HTTP Status Codes
+
+| Code | Meaning | Example |
+|---|---|---|
+| 200 | OK | Successfully viewing a page |
+| 302 | Redirect | Redirecting to Login or Dashboard |
+| 400 | Bad Request | Invalid form input |
+| 401 | Unauthorized | Incorrect login credentials |
+| 403 | Forbidden | Accessing another user's ticket |
+| 404 | Not Found | Ticket does not exist |
+| 409 | Conflict | Registering with an existing email |
+
+---
+
+## 12. Testing Performed
+
+### Authentication
+
+- Registered a Test User account.
+- Verified password hashing.
+- Logged in with registered credentials.
+- Displayed the logged-in user's name.
+- Logged out and cleared the session.
+- Protected ticket management pages with `login_required`.
+
+### Ticket Management
+
+- Created tickets with the authenticated user's ID.
+- Filtered Dashboard tickets by user ownership.
+- Viewed and edited tickets owned by Test User.
+- Tested Admin access to tickets belonging to Test User.
+- Tested Admin editing and deleting another user's ticket.
+
+### Authorization
+
+A Flask test client was used to simulate an unauthorized deletion request.
+
+Test case:
+
+- Logged-in account: Test User.
+- Target: Admin Private Ticket, ID #13.
+- Expected result: HTTP 403 Forbidden.
+- Expected database state: Ticket #13 still exists.
+
+Actual output:
+
+```text
+HTTP Status: 403
+PASS: Unauthorized deletion was blocked
+PASS: Admin ticket still exists
+```
+
+**Result:** The unauthorized deletion test passed.
+
+Direct URL checks for unauthorized View and Edit should also be confirmed and recorded as part of final testing.
+
+---
+
+## 13. Problems Encountered and Solutions
+
+### Problem 1: Duplicate Flask Route
+
+Error:
+
+```text
+AssertionError: View function mapping is overwriting an existing endpoint function: create_ticket
+```
+
+Cause: The `create_ticket()` function was defined more than once.
+
+Solution: Removed the duplicate function and kept a single route definition.
+
+### Problem 2: Edit Ticket Returned 404
+
+Cause: The Edit route was temporarily unavailable or not correctly registered.
+
+Solution: Checked the route definition and confirmed `/tickets/8/edit` opened successfully.
+
+### Problem 3: Admin Ticket Not Found During Testing
+
+Error:
+
+```text
+RuntimeError: Admin ticket not found
+```
+
+Cause: The test script used Ticket ID #14 instead of the actual ID #13.
+
+Solution: Queried SQLite to identify the correct ticket ID and updated the test script.
+
+---
+
+## 14. Security Concepts Learned
+
+**Authentication:** Verifies the user's identity through login credentials.
+
+**Authorization:** Determines whether a user can access or modify a resource.
+
+**Password Hashing:** Converts passwords into one-way hashes for safer storage.
+
+**Session:** Stores information needed to maintain login state across requests.
+
+**Role-Based Access Control (RBAC):** Grants permissions based on user roles.
+
+**Ticket Ownership:** Associates a ticket with the user who created it.
+
+**HTTP 403 Forbidden:** Indicates that an authenticated user does not have permission to access a resource.
+
+---
+
+## 15. Security Improvements for Future Development
+
+Before deploying SmartDesk publicly, additional security improvements are required:
+
+- Add CSRF protection to POST forms.
+- Use a stable, securely stored Flask secret key.
+- Configure secure session cookie settings for HTTPS.
+- Disable Flask Debug Mode in production.
+- Add login rate limiting.
+- Improve error handling and user feedback.
+- Expand automated tests for authentication and authorization.
+- Use a production-ready WSGI server.
+
+---
+
+## 16. Day 3 Summary
+
+Day 3 introduced authentication and authorization into SmartDesk.
+
+The application now supports user registration, password hashing, login, logout, session management, protected routes, ticket ownership, and User/Admin access control.
+
+The most important lesson was understanding the difference between **authentication (who the user is)** and **authorization (what the user is allowed to do)**.
+
+**Day 3 Status:** Core implementation completed. Final security checks and GitHub commit remain.

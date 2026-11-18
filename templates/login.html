@@ -1,0 +1,60 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+    <title>Login - SmartDesk</title>
+</head>
+
+<body>
+
+    <!-- Website heading -->
+    <h1>SmartDesk</h1>
+    <h2>Login to Your Account</h2>
+
+    <!-- Login form -->
+    <form method="POST">
+
+        <!-- Email address -->
+        <label for="email">Email Address:</label>
+        <input
+            type="email"
+            id="email"
+            name="email"
+            required
+        >
+
+        <br><br>
+
+        <!-- Password -->
+        <label for="password">Password:</label>
+        <input
+            type="password"
+            id="password"
+            name="password"
+            required
+        >
+
+        <br><br>
+
+        <!-- Submit login form -->
+        <button type="submit">Login</button>
+
+    </form>
+
+    <br>
+
+    <!-- Registration page -->
+    <p>
+        Don't have an account?
+        <a href="{{ url_for('register') }}">Register</a>
+    </p>
+
+    <!-- Return to dashboard -->
+    <a href="{{ url_for('home') }}">Back to Dashboard</a>
+
+</body>
+</html>

@@ -1,0 +1,82 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Register - SmartDesk</title>
+</head>
+
+<body>
+
+    <!-- Website heading -->
+    <h1>SmartDesk</h1>
+    <h2>Create Your Account</h2>
+
+    <!-- User registration form -->
+    <form method="POST">
+
+        <!-- Full name -->
+        <label for="name">Full Name:</label>
+        <input
+            type="text"
+            id="name"
+            name="name"
+            required
+        >
+
+        <br><br>
+
+        <!-- Email address -->
+        <label for="email">Email Address:</label>
+        <input
+            type="email"
+            id="email"
+            name="email"
+            required
+        >
+
+        <br><br>
+
+        <!-- Password -->
+        <label for="password">Password:</label>
+        <input
+            type="password"
+            id="password"
+            name="password"
+            minlength="8"
+            required
+        >
+
+        <br><br>
+
+        <!-- Confirm password -->
+        <label for="confirm_password">Confirm Password:</label>
+        <input
+            type="password"
+            id="confirm_password"
+            name="confirm_password"
+            minlength="8"
+            required
+        >
+
+        <br><br>
+
+        <!-- Submit registration form -->
+        <button type="submit">Register</button>
+
+    </form>
+
+    <br>
+
+    <!-- Login page will be added later -->
+    <p>Already have an account? Login coming soon.</p>
+
+    <!-- Return to dashboard -->
+    <a href="/">Back to Dashboard</a>
+
+</body>
+</html>
