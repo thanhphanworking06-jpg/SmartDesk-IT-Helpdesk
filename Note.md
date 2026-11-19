@@ -1001,3 +1001,218 @@ The application now supports user registration, password hashing, login, logout,
 The most important lesson was understanding the difference between **authentication (who the user is)** and **authorization (what the user is allowed to do)**.
 
 **Day 3 Status:** Core implementation completed. Final security checks and GitHub commit remain.
+
+# Day 4 – Ticket Search, Filtering, Sorting and Dashboard Statistics
+
+## 1. Objectives
+
+The main objective of Day 4 was to improve the SmartDesk dashboard by making ticket management more efficient and user-friendly.
+
+Features implemented:
+- Search tickets by title and description.
+- Filter tickets by status and priority.
+- Sort tickets using different sorting options.
+- Display dashboard statistics.
+- Maintain role-based access control.
+
+## 2. Ticket Search
+
+**Implementation:**
+
+Implemented a search feature using Flask GET requests and SQLite.
+
+The application retrieves the search keyword from the URL:
+
+```python
+search = request.args.get("search", "").strip()
+search_pattern = f"%{search}%"
+```
+
+SQL uses the `LIKE` operator to search ticket titles and descriptions.
+
+**Key concepts learned:**
+- Flask query parameters (`request.args`)
+- SQL `LIKE`
+- Parameterized SQL queries
+- Combining multiple search conditions
+
+**Security:** Regular users can only search their own tickets, while administrators can search all tickets.
+
+## 3. Ticket Filtering
+
+Implemented two filtering options.
+
+**Status Filter:**
+- Open
+- In Progress
+- Resolved
+
+**Priority Filter:**
+- Low
+- Medium
+- High
+
+Example SQL condition:
+
+```sql
+AND (? = '' OR status = ?)
+AND (? = '' OR priority = ?)
+```
+
+When a filter is empty, the application displays tickets regardless of that field.
+
+Search and filters can be used together.
+
+**Key concepts learned:**
+- Conditional SQL filtering
+- Flask GET parameters
+- HTML dropdown menus
+- Preserving selected values using Jinja2
+
+## 4. Ticket Sorting
+
+Implemented five sorting options:
+
+1. Newest First – ID descending
+2. Oldest First – ID ascending
+3. Priority: High to Low
+4. Priority: Low to High
+5. Status: A to Z
+
+The application uses a predefined Python dictionary to control the SQL `ORDER BY` expression.
+
+Example:
+
+```python
+sort_options = {
+    "newest": "id DESC",
+    "oldest": "id ASC",
+    "status": "status ASC, id DESC"
+}
+```
+
+Priority sorting uses SQL `CASE` expressions to define a custom order.
+
+**Security:** Only predefined sorting expressions are accepted. User input is never inserted directly into the SQL statement.
+
+**Key concepts learned:**
+- SQL `ORDER BY`
+- SQL `CASE`
+- Python dictionaries
+- Input validation
+- Safe dynamic SQL construction
+
+## 5. Dashboard Statistics
+
+Implemented four dashboard statistics:
+
+- Total Tickets
+- Open Tickets
+- In Progress Tickets
+- Resolved Tickets
+
+The statistics are calculated using SQLite aggregate functions.
+
+Example:
+
+```sql
+SELECT
+    COUNT(*) AS total,
+    SUM(CASE WHEN status = 'Open' THEN 1 ELSE 0 END) AS open,
+    SUM(CASE WHEN status = 'In Progress' THEN 1 ELSE 0 END) AS in_progress,
+    SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) AS resolved
+FROM tickets;
+```
+
+**Role-based statistics:**
+- Admin: Statistics for all tickets.
+- Regular User: Statistics for tickets owned by that user.
+
+Statistics are calculated independently of the active search and filters.
+
+## 6. Frontend Improvements
+
+Updated `templates/index.html` with:
+
+- A search input.
+- Status and priority dropdown menus.
+- A sorting dropdown.
+- Apply Filters and Clear controls.
+- Four dashboard statistics cards.
+
+Used CSS Grid to arrange the statistics cards and a media query to improve the layout on smaller screens.
+
+**Key concepts learned:**
+- HTML forms
+- CSS Grid
+- Responsive layouts
+- Jinja2 template variables
+- Integrating Flask backend data with HTML
+
+## 7. Testing
+
+The following functionality was tested:
+
+- Search by ticket title and description.
+- Filtering by status and priority.
+- Sorting by ticket ID, priority and status.
+- Combining search, filtering and sorting.
+- Dashboard statistics calculations.
+- Role-based ticket visibility.
+- Ticket access restrictions.
+
+**Example test result:**
+
+For the Test User dashboard:
+
+| Statistic | Result |
+|---|---:|
+| Total Tickets | 3 |
+| Open Tickets | 2 |
+| In Progress | 1 |
+| Resolved | 0 |
+
+These values were observed during Day 4 testing and may change as tickets are added or updated.
+
+## 8. Problems Encountered and Solutions
+
+**Problem 1: Python Indentation Error**
+
+Some sorting code was placed outside the `home()` function.
+
+Solution: Corrected indentation so that all sorting logic remained inside the function.
+
+**Problem 2: Undefined User Variable**
+
+Dashboard statistics code was accidentally placed inside `database.py`, causing:
+
+`NameError: name 'user' is not defined`
+
+Solution: Moved the statistics logic into the `home()` function in `app.py`, where the authenticated user's role is available.
+
+**Problem 3: Role-Based Data Visibility**
+
+Needed to ensure regular users could not access tickets belonging to other users.
+
+Solution: Retained `WHERE user_id = ?` in user-specific queries and verified ticket access restrictions.
+
+## 9. Technologies Used
+
+- Python
+- Flask
+- SQLite
+- HTML5
+- CSS3
+- Jinja2
+- Git
+- GitHub
+
+## 10. Day 4 Outcome
+
+Successfully improved the SmartDesk dashboard with search, filtering, sorting and statistics features.
+
+The application now provides a more practical ticket management interface while maintaining role-based access control.
+
+**Next Step – Day 5:**
+
+Implement Ticket Assignment and Workflow Management, allowing administrators to assign tickets to IT support staff and track ticket progress.
