@@ -1,12 +1,14 @@
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartDesk - IT Helpdesk</title>
 
     <style>
+        /* General page styling */
         body {
             font-family: Arial, sans-serif;
             margin: 40px;
@@ -17,6 +19,7 @@
             color: #234a7d;
         }
 
+        /* Ticket table styling */
         table {
             width: 100%;
             border-collapse: collapse;
@@ -33,8 +36,49 @@
             background-color: #234a7d;
             color: white;
         }
+
+        /* Dashboard statistics container */
+        .dashboard-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        /* Individual statistics card */
+        .stat-card {
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* Statistics title */
+        .stat-card h3 {
+            font-size: 16px;
+            color: #555;
+            margin-bottom: 10px;
+        }
+
+        /* Statistics number */
+        .stat-card p {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2563eb;
+            margin: 0;
+        }
+
+        /* Responsive layout for smaller screens */
+        @media (max-width: 768px) {
+            .dashboard-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
     </style>
 </head>
+
+
 <body>
 
     <h1>SmartDesk</h1>
@@ -67,11 +111,137 @@
     <p>IT Support Ticket Management System</p>
 
     <h2>Support Tickets</h2>
+    
+    <!-- Dashboard Statistics -->
+    <div class="dashboard-stats">
+
+        <!-- Total Tickets -->
+        <div class="stat-card">
+            <h3>Total Tickets</h3>
+            <p>{{ stats["total"] }}</p>
+        </div>
+
+        <!-- Open Tickets -->
+        <div class="stat-card">
+            <h3>Open Tickets</h3>
+            <p>{{ stats["open"] or 0 }}</p>
+        </div>
+
+        <!-- In Progress Tickets -->
+        <div class="stat-card">
+            <h3>In Progress</h3>
+            <p>{{ stats["in_progress"] or 0 }}</p>
+        </div>
+
+        <!-- Resolved Tickets -->
+        <div class="stat-card">
+            <h3>Resolved</h3>
+            <p>{{ stats["resolved"] or 0 }}</p>
+        </div>
+
+    </div>
+
+    <br>
 
     <!-- Button to open the Create Ticket page -->
     <a href="/tickets/new">
         <button type="button">+ Create New Ticket</button>
     </a>
+
+    
+    <!-- Ticket Search and Filter Form -->
+    <form action="{{ url_for('home') }}" method="GET">
+
+        <!-- Search by title or description -->
+        <label for="search">Search:</label>
+        <input
+            type="text"
+            id="search"
+            name="search"
+            placeholder="Search tickets..."
+            value="{{ search }}"
+        >
+
+        <!-- Filter tickets by status -->
+        <label for="status">Status:</label>
+        <select id="status" name="status">
+            <option value="">All Statuses</option>
+            <option value="Open"
+                {% if status_filter == "Open" %}selected{% endif %}>
+                Open
+            </option>
+            <option value="In Progress"
+                {% if status_filter == "In Progress" %}selected{% endif %}>
+                In Progress
+            </option>
+            <option value="Resolved"
+                {% if status_filter == "Resolved" %}selected{% endif %}>
+                Resolved
+            </option>
+        </select>
+
+            <!-- Filter tickets by priority -->
+            <label for="priority">Priority:</label>
+            <select id="priority" name="priority">
+                <option value="">All Priorities</option>
+                <option value="Low"
+                    {% if priority_filter == "Low" %}selected{% endif %}>
+                    Low
+                </option>
+                <option value="Medium"
+                    {% if priority_filter == "Medium" %}selected{% endif %}>
+                    Medium
+                </option>
+                <option value="High"
+                    {% if priority_filter == "High" %}selected{% endif %}>
+                    High
+                </option>
+            </select>
+
+    <!-- Sort tickets -->
+    <label for="sort">Sort By:</label>
+
+    <select id="sort" name="sort">
+
+        <option value="newest"
+            {% if sort_by == "newest" %}selected{% endif %}>
+            Newest First
+        </option>
+
+        <option value="oldest"
+            {% if sort_by == "oldest" %}selected{% endif %}>
+            Oldest First
+        </option>
+
+        <option value="priority_high"
+            {% if sort_by == "priority_high" %}selected{% endif %}>
+            Priority: High to Low
+        </option>
+
+        <option value="priority_low"
+            {% if sort_by == "priority_low" %}selected{% endif %}>
+            Priority: Low to High
+        </option>
+
+        <option value="status"
+            {% if sort_by == "status" %}selected{% endif %}>
+            Status: A to Z
+        </option>
+
+    </select>
+
+
+            <!-- Apply search and filters -->
+            <button type="submit">Apply Filters</button>
+
+            <!-- Reset search and filters -->
+            <a href="{{ url_for('home') }}">Clear</a>
+
+        </form>
+
+        <br>
+
+
 
     <br><br>
 
@@ -134,4 +304,5 @@
     </table>
 
 </body>
+
 </html>

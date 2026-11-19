@@ -52,6 +52,8 @@ def login_required(view_function):
 
     return wrapper
 
+
+
 # Display the ticket dashboard
 @app.route("/")
 @login_required
@@ -59,6 +61,56 @@ def home():
 
     # Get the logged-in user's ID
     user_id = session["user_id"]
+
+    # Get the search keyword from the URL
+    search = request.args.get("search", "").strip()
+
+    # Get the selected filters from the URL
+    status_filter = request.args.get("status", "").strip()
+    priority_filter = request.args.get("priority", "").strip()
+
+    # Get the selected sorting option
+    sort_by = request.args.get("sort", "newest").strip()
+
+    # Define safe sorting options
+    sort_options = {
+        "newest": "id DESC",
+        "oldest": "id ASC",
+        "priority_high": """
+            CASE priority
+                WHEN 'High' THEN 1
+                WHEN 'Medium' THEN 2
+                WHEN 'Low' THEN 3
+                ELSE 4
+            END ASC, id DESC
+        """,
+        "priority_low": """
+            CASE priority
+                WHEN 'Low' THEN 1
+                WHEN 'Medium' THEN 2
+                WHEN 'High' THEN 3
+                ELSE 4
+            END ASC, id DESC
+        """,
+        "status": "status ASC, id DESC"
+    }
+
+    # Use newest sorting if the option is invalid
+    if sort_by not in sort_options:
+        sort_by = "newest"
+
+    # Get the SQL ORDER BY expression
+    order_by = sort_options[sort_by]
+
+    # Validate filter values
+    if status_filter not in ["", "Open", "In Progress", "Resolved"]:
+        status_filter = ""
+
+    if priority_filter not in ["", "Low", "Medium", "High"]:
+        priority_filter = ""
+
+    # Prepare the keyword for SQL LIKE search
+    search_pattern = f"%{search}%"
 
     # Connect to SQLite
     connection = get_connection()
@@ -70,35 +122,90 @@ def home():
         WHERE id = ?
     """, (user_id,)).fetchone()
 
+    # Handle invalid user session
     if user is None:
         connection.close()
         session.clear()
         return redirect(url_for("login"))
 
-    # Admin can see all tickets
+    # Admin can search, filter, and sort all tickets
     if user["role"] == "Admin":
 
-        tickets = connection.execute("""
+        tickets = connection.execute(f"""
             SELECT *
             FROM tickets
-            ORDER BY id DESC
-        """).fetchall()
+            WHERE (title LIKE ? OR description LIKE ?)
+              AND (? = '' OR status = ?)
+              AND (? = '' OR priority = ?)
+            ORDER BY {order_by}
+        """, (
+            search_pattern,
+            search_pattern,
+            status_filter,
+            status_filter,
+            priority_filter,
+            priority_filter
+        )).fetchall()
 
-    # Regular users can only see their own tickets
+    # Regular users can only search, filter, and sort their own tickets
     else:
 
-        tickets = connection.execute("""
+        tickets = connection.execute(f"""
             SELECT *
             FROM tickets
             WHERE user_id = ?
-            ORDER BY id DESC
-        """, (user_id,)).fetchall()
+              AND (title LIKE ? OR description LIKE ?)
+              AND (? = '' OR status = ?)
+              AND (? = '' OR priority = ?)
+            ORDER BY {order_by}
+        """, (
+            user_id,
+            search_pattern,
+            search_pattern,
+            status_filter,
+            status_filter,
+            priority_filter,
+            priority_filter
+        )).fetchall()
+
+    
+    # Get dashboard statistics based on user role
+    if user["role"] == "Admin":
+
+        stats = connection.execute("""
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN status = 'Open' THEN 1 ELSE 0 END) AS open,
+                SUM(CASE WHEN status = 'In Progress' THEN 1 ELSE 0 END) AS in_progress,
+                SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) AS resolved
+            FROM tickets
+        """).fetchone()
+
+    else:
+
+        stats = connection.execute("""
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN status = 'Open' THEN 1 ELSE 0 END) AS open,
+                SUM(CASE WHEN status = 'In Progress' THEN 1 ELSE 0 END) AS in_progress,
+                SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) AS resolved
+            FROM tickets
+            WHERE user_id = ?
+        """, (user_id,)).fetchone()
 
     # Close database connection
     connection.close()
 
-    # Display the dashboard
-    return render_template("index.html", tickets=tickets)
+    # Display the dashboard with search, filters, and sorting
+    return render_template(
+        "index.html",
+        tickets=tickets,
+        search=search,
+        status_filter=status_filter,
+        priority_filter=priority_filter,
+        sort_by=sort_by,
+        stats=stats
+    )
 
 # Display and process the Create Ticket form
 @app.route("/tickets/new", methods=["GET", "POST"])
@@ -148,7 +255,6 @@ def create_ticket():
 
     # Show the form when using GET
     return render_template("create_ticket.html")
-
 
 # Display details of a single ticket
 @app.route("/tickets/<int:ticket_id>")
@@ -302,8 +408,6 @@ def edit_ticket(ticket_id):
         ticket=ticket
     )
 
-
-
 # Delete a ticket
 @app.route("/tickets/<int:ticket_id>/delete", methods=["POST"])
 @login_required
@@ -417,7 +521,6 @@ def register():
 
     # Display the registration form
     return render_template("register.html")
-
 
 # Login an existing user
 @app.route("/login", methods=["GET", "POST"])
