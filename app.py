@@ -72,139 +72,70 @@ def home():
     # Get the selected sorting option
     sort_by = request.args.get("sort", "newest").strip()
 
-    # Define safe sorting options
+    # Safe sorting expressions use explicit ticket table aliases
     sort_options = {
-        "newest": "id DESC",
-        "oldest": "id ASC",
-        "priority_high": """
-            CASE priority
-                WHEN 'High' THEN 1
-                WHEN 'Medium' THEN 2
-                WHEN 'Low' THEN 3
-                ELSE 4
-            END ASC, id DESC
-        """,
-        "priority_low": """
-            CASE priority
-                WHEN 'Low' THEN 1
-                WHEN 'Medium' THEN 2
-                WHEN 'High' THEN 3
-                ELSE 4
-            END ASC, id DESC
-        """,
-        "status": "status ASC, id DESC"
+        "newest": "t.id DESC",
+        "oldest": "t.id ASC",
+        "priority_high": "CASE t.priority WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 WHEN 'Low' THEN 3 ELSE 4 END, t.id DESC",
+        "priority_low": "CASE t.priority WHEN 'Low' THEN 1 WHEN 'Medium' THEN 2 WHEN 'High' THEN 3 ELSE 4 END, t.id DESC",
+        "status": "t.status ASC, t.id DESC"
     }
-
-    # Use newest sorting if the option is invalid
     if sort_by not in sort_options:
         sort_by = "newest"
-
-    # Get the SQL ORDER BY expression
-    order_by = sort_options[sort_by]
-
-    # Validate filter values
-    if status_filter not in ["", "Open", "In Progress", "Resolved"]:
+    if status_filter not in ("", "Open", "In Progress", "Resolved"):
         status_filter = ""
-
-    if priority_filter not in ["", "Low", "Medium", "High"]:
+    if priority_filter not in ("", "Low", "Medium", "High"):
         priority_filter = ""
 
-    # Prepare the keyword for SQL LIKE search
-    search_pattern = f"%{search}%"
-
-    # Connect to SQLite
     connection = get_connection()
+    try:
+        user = connection.execute(
+            "SELECT role FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        if user is None:
+            session.clear()
+            return redirect(url_for("login"))
 
-    # Read the user's current role from the database
-    user = connection.execute("""
-        SELECT role
-        FROM users
-        WHERE id = ?
-    """, (user_id,)).fetchone()
+        current_role = user["role"]
+        if current_role == "Admin":
+            visibility_sql = "1 = 1"
+            visibility_params = []
+        elif current_role == "IT Support":
+            visibility_sql = "t.assigned_to = ?"
+            visibility_params = [user_id]
+        else:
+            visibility_sql = "t.user_id = ?"
+            visibility_params = [user_id]
 
-    # Handle invalid user session
-    if user is None:
+        tickets = connection.execute(f"""
+            SELECT t.*, creator.name AS created_by,
+                   support.name AS assigned_to_name
+            FROM tickets AS t
+            JOIN users AS creator ON creator.id = t.user_id
+            LEFT JOIN users AS support ON support.id = t.assigned_to
+            WHERE {visibility_sql}
+              AND (t.title LIKE ? OR t.description LIKE ?)
+              AND (? = '' OR t.status = ?)
+              AND (? = '' OR t.priority = ?)
+            ORDER BY {sort_options[sort_by]}
+        """, (*visibility_params, f"%{search}%", f"%{search}%",
+              status_filter, status_filter, priority_filter, priority_filter)).fetchall()
+
+        stats = connection.execute(f"""
+            SELECT COUNT(*) AS total,
+                   SUM(CASE WHEN t.status = 'Open' THEN 1 ELSE 0 END) AS open,
+                   SUM(CASE WHEN t.status = 'In Progress' THEN 1 ELSE 0 END) AS in_progress,
+                   SUM(CASE WHEN t.status = 'Resolved' THEN 1 ELSE 0 END) AS resolved
+            FROM tickets AS t
+            WHERE {visibility_sql}
+        """, visibility_params).fetchone()
+    finally:
         connection.close()
-        session.clear()
-        return redirect(url_for("login"))
 
-    # Admin can search, filter, and sort all tickets
-    if user["role"] == "Admin":
-
-        tickets = connection.execute(f"""
-            SELECT *
-            FROM tickets
-            WHERE (title LIKE ? OR description LIKE ?)
-              AND (? = '' OR status = ?)
-              AND (? = '' OR priority = ?)
-            ORDER BY {order_by}
-        """, (
-            search_pattern,
-            search_pattern,
-            status_filter,
-            status_filter,
-            priority_filter,
-            priority_filter
-        )).fetchall()
-
-    # Regular users can only search, filter, and sort their own tickets
-    else:
-
-        tickets = connection.execute(f"""
-            SELECT *
-            FROM tickets
-            WHERE user_id = ?
-              AND (title LIKE ? OR description LIKE ?)
-              AND (? = '' OR status = ?)
-              AND (? = '' OR priority = ?)
-            ORDER BY {order_by}
-        """, (
-            user_id,
-            search_pattern,
-            search_pattern,
-            status_filter,
-            status_filter,
-            priority_filter,
-            priority_filter
-        )).fetchall()
-
-    
-    # Get dashboard statistics based on user role
-    if user["role"] == "Admin":
-
-        stats = connection.execute("""
-            SELECT
-                COUNT(*) AS total,
-                SUM(CASE WHEN status = 'Open' THEN 1 ELSE 0 END) AS open,
-                SUM(CASE WHEN status = 'In Progress' THEN 1 ELSE 0 END) AS in_progress,
-                SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) AS resolved
-            FROM tickets
-        """).fetchone()
-
-    else:
-
-        stats = connection.execute("""
-            SELECT
-                COUNT(*) AS total,
-                SUM(CASE WHEN status = 'Open' THEN 1 ELSE 0 END) AS open,
-                SUM(CASE WHEN status = 'In Progress' THEN 1 ELSE 0 END) AS in_progress,
-                SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) AS resolved
-            FROM tickets
-            WHERE user_id = ?
-        """, (user_id,)).fetchone()
-
-    # Close database connection
-    connection.close()
-
-    # Display the dashboard with search, filters, and sorting
     return render_template(
-        "index.html",
-        tickets=tickets,
-        search=search,
-        status_filter=status_filter,
-        priority_filter=priority_filter,
-        sort_by=sort_by,
-        stats=stats
+        "index.html", tickets=tickets, search=search,
+        status_filter=status_filter, priority_filter=priority_filter,
+        sort_by=sort_by, stats=stats, current_role=current_role
     )
 
 # Display and process the Create Ticket form
@@ -260,58 +191,131 @@ def create_ticket():
 @app.route("/tickets/<int:ticket_id>")
 @login_required
 def ticket_detail(ticket_id):
-
-    # Get the currently logged-in user's ID
     user_id = session["user_id"]
+    connection = get_connection()
+    try:
+        ticket = connection.execute("""
+            SELECT t.*, creator.name AS created_by,
+                   support.name AS assigned_to_name
+            FROM tickets AS t
+            JOIN users AS creator ON creator.id = t.user_id
+            LEFT JOIN users AS support ON support.id = t.assigned_to
+            WHERE t.id = ?
+        """, (ticket_id,)).fetchone()
+        if ticket is None:
+            abort(404)
+        user = connection.execute(
+            "SELECT role FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        if user is None:
+            session.clear()
+            return redirect(url_for("login"))
+        current_role = user["role"]
+        is_assigned_support = (
+            current_role == "IT Support" and ticket["assigned_to"] == user_id
+        )
+        if (ticket["user_id"] != user_id
+                and current_role != "Admin"
+                and not is_assigned_support):
+            abort(403)
+        support_users = []
+        if current_role == "Admin":
+            support_users = connection.execute("""
+                SELECT id, name FROM users
+                WHERE role = 'IT Support' ORDER BY name ASC
+            """).fetchall()
+    finally:
+        connection.close()
+    return render_template(
+        "ticket_detail.html", ticket=ticket,
+        current_role=current_role, support_users=support_users,
+        can_update_status=(current_role == "Admin" or is_assigned_support)
+    )
 
-    # Connect to SQLite
+
+# Update ticket status: only Admin or assigned IT Support
+@app.route("/tickets/<int:ticket_id>/status", methods=["POST"])
+@login_required
+def update_ticket_status(ticket_id):
+    new_status = request.form.get("status", "").strip()
+    if new_status not in ("Open", "In Progress", "Resolved"):
+        abort(400)
+    connection = get_connection()
+    try:
+        user = connection.execute(
+            "SELECT role FROM users WHERE id = ?", (session["user_id"],)
+        ).fetchone()
+        ticket = connection.execute(
+            "SELECT assigned_to FROM tickets WHERE id = ?", (ticket_id,)
+        ).fetchone()
+        if ticket is None:
+            abort(404)
+        if user is None or not (
+            user["role"] == "Admin" or
+            (user["role"] == "IT Support" and ticket["assigned_to"] == session["user_id"])
+        ):
+            abort(403)
+        connection.execute(
+            "UPDATE tickets SET status = ? WHERE id = ?", (new_status, ticket_id)
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    return redirect(url_for("ticket_detail", ticket_id=ticket_id))
+
+
+@app.route("/tickets/<int:ticket_id>/assign", methods=["POST"])
+@login_required
+def assign_ticket(ticket_id):
+    user_id = session["user_id"]
     connection = get_connection()
 
-    # Find the ticket by ID
-    ticket = connection.execute("""
-        SELECT
-            tickets.id,
-            tickets.title,
-            tickets.description,
-            tickets.status,
-            tickets.priority,
-            tickets.created_at,
-            tickets.user_id,
-            users.name AS created_by
-        FROM tickets
-        JOIN users ON tickets.user_id = users.id
-        WHERE tickets.id = ?
-    """, (ticket_id,)).fetchone()
+    try:
+        # Read the current role from the database, not the session
+        current_user = connection.execute("""
+            SELECT role FROM users WHERE id = ?
+        """, (user_id,)).fetchone()
 
-    # Handle ticket not found
-    if ticket is None:
+        if current_user is None or current_user["role"] != "Admin":
+            abort(403)
+
+        # Make sure the requested ticket exists
+        ticket = connection.execute("""
+            SELECT id FROM tickets WHERE id = ?
+        """, (ticket_id,)).fetchone()
+        if ticket is None:
+            abort(404)
+
+        # Empty selection means remove the current assignment
+        selected_user = request.form.get("assigned_to", "").strip()
+        if selected_user == "":
+            support_id = None
+        else:
+            try:
+                support_id = int(selected_user)
+            except ValueError:
+                abort(400, description="Invalid support user ID.")
+
+            if support_id <= 0:
+                abort(400, description="Invalid support user ID.")
+
+            # Assign tickets only to users with the IT Support role
+            support_user = connection.execute("""
+                SELECT id FROM users
+                WHERE id = ? AND role = 'IT Support'
+            """, (support_id,)).fetchone()
+            if support_user is None:
+                abort(400, description="Selected user is not IT Support.")
+
+        connection.execute("""
+            UPDATE tickets SET assigned_to = ? WHERE id = ?
+        """, (support_id, ticket_id))
+        connection.commit()
+    finally:
         connection.close()
-        return "Ticket not found", 404
 
-    # Get the logged-in user's role
-    user = connection.execute("""
-        SELECT role
-        FROM users
-        WHERE id = ?
-    """, (user_id,)).fetchone()
+    return redirect(url_for("ticket_detail", ticket_id=ticket_id))
 
-    # Close database connection
-    connection.close()
-
-    # Handle invalid user session
-    if user is None:
-        session.clear()
-        return redirect(url_for("login"))
-
-    # Check ticket ownership and admin permission
-    if ticket["user_id"] != user_id and user["role"] != "Admin":
-        abort(403)
-
-    # Display ticket details
-    return render_template(
-        "ticket_detail.html",
-        ticket=ticket
-    )
 
 # Display and process the Edit Ticket form
 @app.route("/ticket/<int:ticket_id>/edit", methods=["GET", "POST"])

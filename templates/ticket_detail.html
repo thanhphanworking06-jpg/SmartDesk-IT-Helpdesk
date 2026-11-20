@@ -7,6 +7,58 @@
     <meta name="viewport"
           content="width=device-width, initial-scale=1.0">
     <title>Ticket Details - SmartDesk</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 30px;
+            background-color: #f8fafc;
+            color: #1e293b;
+        }
+
+        .ticket-container {
+            max-width: 750px;
+            margin: 20px auto;
+            padding: 25px;
+            background-color: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+        }
+
+        .assignment-section {
+            margin-top: 25px;
+            padding: 20px;
+            background-color: #f1f5f9;
+            border-radius: 8px;
+        }
+
+        select {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0 15px;
+            border: 1px solid #cbd5e1;
+            border-radius: 5px;
+        }
+
+        button {
+            background-color: #2563eb;
+            color: white;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #1d4ed8;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+        }
+    </style>
 </head>
 
 <body>
@@ -15,38 +67,162 @@
     <h1>SmartDesk</h1>
     <p>IT Support Ticket Management System</p>
 
-    <!-- Ticket information -->
-    <h2>Ticket #{{ ticket.id }}</h2>
+    <div class="ticket-container">
 
-    <h3>{{ ticket.title }}</h3>
+        <!-- Ticket information -->
+        <h2>Ticket #{{ ticket.id }}</h2>
 
-    <p>
-        <strong>Description:</strong>
-        {{ ticket.description }}
-    </p>
+        <h3>{{ ticket.title }}</h3>
 
-    <p>
-        <strong>Status:</strong>
-        {{ ticket.status }}
-    </p>
+        <p>
+            <strong>Description:</strong>
+            {{ ticket.description }}
+        </p>
 
-    <p>
-        <strong>Priority:</strong>
-        {{ ticket.priority }}
-    </p>
+        <p>
+            <strong>Status:</strong>
+            {{ ticket.status }}
+        </p>
 
-    <p>
-        <strong>Created By:</strong>
-        {{ ticket.created_by }}
-    </p>
+        <p>
+            <strong>Priority:</strong>
+            {{ ticket.priority }}
+        </p>
 
-    <p>
-        <strong>Created At:</strong>
-        {{ ticket.created_at }}
-    </p>
+        <p>
+            <strong>Created By:</strong>
+            {{ ticket.created_by }}
+        </p>
 
-    <!-- Return to dashboard -->
-    <a href="/">Back to Dashboard</a>
+        <p>
+            <strong>Created At:</strong>
+            {{ ticket.created_at }}
+        </p>
+
+        <!-- Current ticket assignment -->
+        <p>
+            <strong>Assigned To:</strong>
+
+            {% if ticket.assigned_to_name %}
+                {{ ticket.assigned_to_name }}
+            {% else %}
+                Unassigned
+            {% endif %}
+        </p>
+
+        <!-- Only Admin can manage assignments -->
+        {% if current_role == "Admin" %}
+
+        <div class="assignment-section">
+
+            <h3>Ticket Assignment</h3>
+
+            <p>
+                Assign this ticket to an IT Support
+                staff member.
+            </p>
+
+            <form
+                method="POST"
+                action="{{ url_for('assign_ticket', ticket_id=ticket.id) }}"
+            >
+
+                <label for="assigned_to">
+                    <strong>Select IT Support:</strong>
+                </label>
+
+                <select
+                    id="assigned_to"
+                    name="assigned_to"
+                >
+
+                    <option value="">
+                        Unassigned
+                    </option>
+
+                    {% for staff in support_users %}
+
+                    <option
+                        value="{{ staff.id }}"
+                        {% if ticket.assigned_to == staff.id %}
+                            selected
+                        {% endif %}
+                    >
+                        {{ staff.name }}
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+                <button type="submit">
+                    Save Assignment
+                </button>
+
+            </form>
+
+        </div>
+
+        {% endif %}
+
+        <!-- Ticket Status Workflow -->
+        {% if current_role == "Admin" or
+            (current_role == "IT Support" and
+            ticket.assigned_to == session.get("user_id")) %}
+
+        <div class="assignment-section">
+
+            <h3>Update Ticket Status</h3>
+
+            <p>
+                Update the progress of this support ticket.
+            </p>
+
+            <form
+                method="POST"
+                action="{{ url_for('update_ticket_status', ticket_id=ticket.id) }}"
+            >
+
+                <label for="status">
+                    <strong>Select Status:</strong>
+                </label>
+
+                <select id="status" name="status">
+
+                    <option value="Open"
+                        {% if ticket.status == "Open" %}selected{% endif %}>
+                        Open
+                    </option>
+
+                    <option value="In Progress"
+                        {% if ticket.status == "In Progress" %}selected{% endif %}>
+                        In Progress
+                    </option>
+
+                    <option value="Resolved"
+                        {% if ticket.status == "Resolved" %}selected{% endif %}>
+                        Resolved
+                    </option>
+
+                </select>
+
+                <button type="submit">
+                    Save Status
+                </button>
+
+            </form>
+
+        </div>
+
+        {% endif %}
+
+        <!-- Return to dashboard -->
+        <a class="back-link"
+           href="{{ url_for('home') }}">
+            Back to Dashboard
+        </a>
+
+    </div>
 
 </body>
 </html>

@@ -19,67 +19,113 @@ def get_connection():
     return connection
 
 
-# Create database tables
+# Create database tables and apply migrations
 def init_db():
     connection = get_connection()
-    cursor = connection.cursor()
 
-    # Table 1: Users
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT NOT NULL UNIQUE,
-            password_hash TEXT,
-            role TEXT NOT NULL DEFAULT 'User'
-        )
-    """)
-    
-    # Check existing columns in the users table
-    cursor.execute("PRAGMA table_info(users)")
-    columns = [column["name"] for column in cursor.fetchall()]
+    try:
+        cursor = connection.cursor()
 
-    # Add password_hash column if it does not exist
-    if "password_hash" not in columns:
+        # Table 1: Users
         cursor.execute("""
-            ALTER TABLE users
-            ADD COLUMN password_hash TEXT
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT,
+                role TEXT NOT NULL DEFAULT 'User'
+            )
         """)
 
+        # Check existing columns in the users table
+        cursor.execute("PRAGMA table_info(users)")
+        user_columns = [
+            column["name"] for column in cursor.fetchall()
+        ]
 
-    # Table 2: Tickets
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS tickets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            description TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'Open',
-            priority TEXT NOT NULL DEFAULT 'Medium',
-            user_id INTEGER NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        )
-    """)
+        # Add password_hash column if missing
+        if "password_hash" not in user_columns:
+            cursor.execute("""
+                ALTER TABLE users
+                ADD COLUMN password_hash TEXT
+            """)
 
-    # Add a demo user for testing
-    # INSERT OR IGNORE prevents duplicate demo users
-    cursor.execute("""
-        INSERT OR IGNORE INTO users (id, name, email, role)
-        VALUES (1, 'Demo User', 'demo@example.com', 'User')
-    """)
+        # Add role column if missing
+        if "role" not in user_columns:
+            cursor.execute("""
+                ALTER TABLE users
+                ADD COLUMN role TEXT NOT NULL DEFAULT 'User'
+            """)
 
-    # Sample tickets are no longer created automatically.
-    # New tickets must be created through the website.
+        # Supported user roles:
+        # User       - Creates and tracks own tickets
+        # Admin      - Manages all tickets and assignments
+        # IT Support - Works on assigned tickets
 
-    # Save changes to the database
-    connection.commit()
+        # Table 2: Tickets
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tickets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'Open',
+                priority TEXT NOT NULL DEFAULT 'Medium',
+                user_id INTEGER NOT NULL,
+                assigned_to INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                FOREIGN KEY (assigned_to) REFERENCES users(id)
+            )
+        """)
 
-    # Close the database connection
-    connection.close()
+        # Check existing columns in the tickets table
+        cursor.execute("PRAGMA table_info(tickets)")
+        ticket_columns = [
+            column["name"] for column in cursor.fetchall()
+        ]
+
+        # Add assigned_to column for existing databases
+        if "assigned_to" not in ticket_columns:
+            cursor.execute("""
+                ALTER TABLE tickets
+                ADD COLUMN assigned_to INTEGER
+                REFERENCES users(id)
+            """)
+
+            print(
+                "Migration completed: "
+                "assigned_to column added."
+            )
+
+        # Add a demo user for testing
+        # INSERT OR IGNORE prevents duplicate demo users
+        cursor.execute("""
+            INSERT OR IGNORE INTO users (
+                id, name, email, role
+            )
+            VALUES (
+                1, 'Demo User', 'demo@example.com', 'User'
+            )
+        """)
+
+        # Sample tickets are not created automatically.
+        # New tickets must be created through the website.
+
+        # Save all database changes
+        connection.commit()
+
+        print("Database initialized successfully!")
+
+    except sqlite3.Error:
+        # Roll back changes if a database error occurs
+        connection.rollback()
+        raise
+
+    finally:
+        # Always close the database connection
+        connection.close()
 
 
 # Run database setup
 if __name__ == "__main__":
     init_db()
-    print("Database initialized successfully!")

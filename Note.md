@@ -1,6 +1,6 @@
 # SmartDesk – IT Support Ticket Management System
 
-## Day 1 – Project Setup & Database
+# Day 1 – Project Setup & Database
 
 ### 1. Day 1 Objectives
 
@@ -48,7 +48,7 @@ IT-Helpdesk-System/
 ├── database.py
 ├── helpdesk.db
 ├── .gitignore
-└── Note.txt
+└── Note.md
 ```
 
 **File explanations:**
@@ -269,7 +269,7 @@ Jinja2 allows Flask to display dynamic database content in HTML templates.
 
 ---
 
-### 10. Git and GitHub Setup
+### 9. Git and GitHub Setup
 
 Git tracks changes in project files.
 
@@ -338,7 +338,7 @@ By the end of Day 1, the application could display support tickets stored in SQL
 - Test CRUD operations.
 - Commit and push changes to GitHub.
 
-## Day 2 Development Notes
+# Day 2 Development Notes
 
 ### Ticket Management System – CRUD Operations
 
@@ -418,7 +418,7 @@ WHERE id = ?
 
 ### 4. UPDATE – Edit an Existing Ticket
 
-**Route:** `/tickets/<int:ticket_id>/edit`
+**Route:** `/ticket/<int:ticket_id>/edit`
 
 **HTTP Methods:** GET and POST
 
@@ -501,7 +501,7 @@ Whenever the application restarted, `init_db()` executed this code and inserted 
 
 Removed the sample ticket insertion logic from `init_db()`.
 
-Kept:
+**Kept:**
 - Database connection function.
 - Users and tickets table creation.
 - Demo User creation.
@@ -534,21 +534,7 @@ Database initialization should create the required database structure without au
 
 ---
 
-### 8. SQL Commands Learned
-
-**INSERT:** Add new records.
-
-**SELECT:** Retrieve existing records.
-
-**UPDATE:** Modify existing records.
-
-**DELETE:** Remove records.
-
-**SQL placeholders (`?`):** Pass values separately from SQL statements to help prevent SQL injection.
-
----
-
-### 9. Testing
+#### 8. Testing
 
 Manual testing checklist:
 
@@ -562,7 +548,7 @@ Manual testing checklist:
 
 ---
 
-### 10. Git and GitHub
+### 9. Git and GitHub
 
 After testing, the Day 2 changes should be committed and pushed to GitHub.
 
@@ -580,7 +566,7 @@ git push origin main
 
 ---
 
-### 11. Files Created or Updated
+### 10. Files Created or Updated
 
 | File | Purpose |
 |---|---|
@@ -590,11 +576,11 @@ git push origin main
 | `templates/create_ticket.html` | Create Ticket form |
 | `templates/ticket_detail.html` | Ticket details page |
 | `templates/edit_ticket.html` | Edit Ticket form |
-| `Note.txt` | Development notes |
+| `Note.md` | Development notes |
 
 ---
 
-### 12. Day 2 Summary
+### 11. Day 2 Summary
 
 During Day 2, I implemented a complete set of CRUD operations for an IT support ticket management application.
 
@@ -604,7 +590,7 @@ I also fixed a database initialization issue that caused deleted sample tickets 
 
 These features form the foundation of the SmartDesk ticket management system.
 
-### 13. Day 3 Goals
+### 12. Day 3 Goals
 
 - User registration.
 - User login and logout.
@@ -614,7 +600,7 @@ These features form the foundation of the SmartDesk ticket management system.
 - Protect ticket operations from unauthorized access.
 - Add CSRF protection for state-changing requests.
 
-## Day 3 – User Authentication & Authorization
+# Day 3 – User Authentication & Authorization
 
 ## 1. Objectives
 
@@ -943,7 +929,7 @@ Solution: Removed the duplicate function and kept a single route definition.
 
 Cause: The Edit route was temporarily unavailable or not correctly registered.
 
-Solution: Checked the route definition and confirmed `/tickets/8/edit` opened successfully.
+Solution: Checked the route definition and confirmed the ticket edit page opened successfully. The current route is `/ticket/<int:ticket_id>/edit`.
 
 ### Problem 3: Admin Ticket Not Found During Testing
 
@@ -1196,23 +1182,101 @@ Needed to ensure regular users could not access tickets belonging to other users
 
 Solution: Retained `WHERE user_id = ?` in user-specific queries and verified ticket access restrictions.
 
-## 9. Technologies Used
-
-- Python
-- Flask
-- SQLite
-- HTML5
-- CSS3
-- Jinja2
-- Git
-- GitHub
-
-## 10. Day 4 Outcome
+## 9. Day 4 Outcome
 
 Successfully improved the SmartDesk dashboard with search, filtering, sorting and statistics features.
 
 The application now provides a more practical ticket management interface while maintaining role-based access control.
 
-**Next Step – Day 5:**
+**Next Step – Day 5:** Ticket assignment and IT Support workflow (documented below).
 
-Implement Ticket Assignment and Workflow Management, allowing administrators to assign tickets to IT support staff and track ticket progress.
+# Day 5 – Ticket Assignment & IT Support Workflow
+
+## 1. Objectives and Outcome
+
+Implemented ticket assignment and a dedicated IT Support workflow. A User creates a ticket, an Admin assigns it to IT Support, and the assigned staff member updates its status. Existing search, filtering, sorting, and dashboard statistics remain available.
+
+## 2. Database Migration (`database.py`)
+
+Added `tickets.assigned_to INTEGER REFERENCES users(id)` to store the assigned staff member's user ID. `NULL` means unassigned. The migration checks existing columns using `PRAGMA table_info(tickets)` before applying `ALTER TABLE`, preserving existing records.
+
+**Key lesson:** Database schema changes can be applied incrementally without recreating the database.
+
+## 3. Role-Based Ticket Visibility
+
+| Role | Dashboard visibility | Assignment | Ticket status | Edit/Delete |
+|---|---|---|---|---|
+| Admin | All tickets | Assign/unassign | Update | Allowed |
+| User | Own tickets | Not allowed | Via existing edit permissions | Own tickets |
+| IT Support | Assigned tickets | Not allowed | Assigned tickets only | Not allowed |
+
+Public registration still creates accounts with the `User` role. The `IT Support Test` account was configured for local development testing.
+
+Updated `app.py` and `templates/index.html` to filter tickets and dashboard statistics by role. Used SQL `JOIN` for the ticket creator's name and `LEFT JOIN` for the optional assignee name. The dashboard now includes an **Assigned To** column and shows **My Assigned Tickets** for IT Support.
+
+## 4. Ticket Assignment
+
+**Backend:** `POST /tickets/<int:ticket_id>/assign` in `app.py`.
+
+- Requires authentication and the Admin role.
+- Checks that the ticket exists and the selected assignee has the `IT Support` role.
+- Saves a valid staff ID or `NULL` for unassignment.
+- Rejects unauthorized requests with HTTP `403 Forbidden`.
+
+**Frontend:** `templates/ticket_detail.html` shows the assigned staff member and an Admin-only assignment dropdown.
+
+## 5. IT Support Status Workflow
+
+**Backend:** `POST /tickets/<int:ticket_id>/status` in `app.py`.
+
+- Accepts only `Open`, `In Progress`, or `Resolved`.
+- Allows Admin or the IT Support account currently assigned to the ticket.
+- Saves the status in SQLite and redirects to ticket details.
+
+**Frontend:** Assigned IT Support staff can view their tickets and use the **Update Ticket Status** form. They cannot see Admin assignment controls or use the general Edit/Delete actions.
+
+**Key lesson:** Hiding UI buttons is not a security boundary; authorization must also be checked on the server.
+
+## 6. Testing and Results
+
+| Test | Result |
+|---|---|
+| Database migration preserves existing tickets | PASS |
+| Admin assigns and unassigns a ticket | PASS |
+| Regular User cannot assign tickets | PASS |
+| IT Support sees assigned Ticket #14 | PASS |
+| IT Support sees the status form, not the assignment form | PASS |
+| Ticket #14 changes from `Open` to `In Progress` | PASS |
+| SQLite and dashboard statistics reflect the new status | PASS |
+| IT Support cannot assign, edit, or delete via POST | PASS (403 for each) |
+| Security test preserves ticket assignment and status | PASS |
+
+Security test output:
+
+```text
+Assignment HTTP Status: 403
+Edit HTTP Status: 403
+Delete HTTP Status: 403
+PASS: IT Support cannot assign, edit, or delete tickets.
+PASS: Ticket assignment and status remain unchanged.
+```
+
+## 7. Issues Resolved
+
+**Missing Flask secret key:** A new PowerShell terminal did not inherit `SMARTDESK_SECRET_KEY`. Set it in that terminal before running the test:
+
+```powershell
+$env:SMARTDESK_SECRET_KEY = python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+**Security test setup failure:** `test_assignment.py` intentionally unassigned Ticket #14 at the end, so `test_support_security.py` stopped because the ticket was not assigned. Reassigned Ticket #14 to IT Support Test (user ID 4) and reran the security test successfully.
+
+**Key lesson:** Test scripts can change database state; test prerequisites and execution order matter.
+
+## 8. Day 5 Summary and Next Steps
+
+Day 5 delivered a working assignment and IT Support status workflow with tested server-side authorization. Practiced SQLite migrations, SQL joins, Flask POST routes, Jinja2 role-specific interfaces, and Flask Test Client security checks.
+
+**Day 5 development and security testing: COMPLETED.**
+
+**Next steps:** Save documentation and commit/push changes to GitHub. Future enhancements may include ticket comments, activity history, notifications, CSRF protection, and expanded automated tests.
