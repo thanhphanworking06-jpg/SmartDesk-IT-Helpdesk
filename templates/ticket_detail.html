@@ -214,7 +214,79 @@
 
         </div>
 
+        
         {% endif %}
+
+        <!-- Day 6: Ticket Comments -->
+        <div class="assignment-section">
+            <h3>Comments</h3>
+
+            {% if comments %}
+                {% for comment in comments %}
+                    <div class="comment-item">
+                        <p>
+                            <strong>{{ comment.author_name }}</strong>
+                            ({{ comment.author_role }})
+                        </p>
+
+                        <p>{{ comment.content }}</p>
+
+                        <small>{{ comment.created_at }}</small>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>No comments yet.</p>
+            {% endif %}
+
+            <!-- Day 6: Add Comment Form -->
+            <h3>Add a Comment</h3>
+
+            <form method="POST"
+                  action="{{ url_for('add_comment', ticket_id=ticket.id) }}">
+
+                <label for="content">
+                    <strong>Your Comment:</strong>
+                </label>
+
+                <textarea
+                    id="content"
+                    name="content"
+                    rows="4"
+                    maxlength="2000"
+                    placeholder="Write your comment here..."
+                    required
+                    style="width: 100%; box-sizing: border-box; margin-top: 10px; padding: 10px;"
+                ></textarea>
+
+                <button type="submit" style="margin-top: 10px;">
+                    Post Comment
+                </button>
+            </form>
+        </div>
+
+        <!-- Day 6: Ticket Activity History -->
+        <div class="assignment-section">
+            <h3>Activity History</h3>
+
+            {% if activities %}
+                {% for activity in activities %}
+                    <div class="activity-item">
+
+                        <p>
+                            <strong>{{ activity.performed_by }}</strong>
+                            ({{ activity.performer_role }})
+                        </p>
+
+                        <p>{{ activity.details }}</p>
+
+                        <small>{{ activity.created_at }}</small>
+
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>No activity history yet.</p>
+            {% endif %}
+        </div>
 
         <!-- Return to dashboard -->
         <a class="back-link"
@@ -223,6 +295,7 @@
         </a>
 
     </div>
+
 
 </body>
 </html>

@@ -1192,6 +1192,7 @@ The application now provides a more practical ticket management interface while 
 
 # Day 5 – Ticket Assignment & IT Support Workflow
 
+
 ## 1. Objectives and Outcome
 
 Implemented ticket assignment and a dedicated IT Support workflow. A User creates a ticket, an Admin assigns it to IT Support, and the assigned staff member updates its status. Existing search, filtering, sorting, and dashboard statistics remain available.
@@ -1280,3 +1281,139 @@ Day 5 delivered a working assignment and IT Support status workflow with tested 
 **Day 5 development and security testing: COMPLETED.**
 
 **Next steps:** Save documentation and commit/push changes to GitHub. Future enhancements may include ticket comments, activity history, notifications, CSRF protection, and expanded automated tests.
+
+
+---
+
+# Day 6 – Ticket Comments and Activity History
+
+## 1. Objectives
+
+The goal of Day 6 was to improve communication and accountability in the SmartDesk IT Helpdesk System.
+
+Implemented features:
+- Ticket comments
+- Role-based comment permissions
+- Comment input validation
+- Ticket activity history
+- Automatic assignment activity logging
+- Automatic status change logging
+- Security testing
+
+## 2. Database Improvements
+
+### Comments Table
+
+Created a `comments` table with the following columns:
+
+- `id`: Unique comment identifier
+- `ticket_id`: Related support ticket
+- `user_id`: Comment author
+- `content`: Comment text
+- `created_at`: Comment creation timestamp
+
+Added an index on `ticket_id` to improve comment retrieval.
+
+### Ticket Activities Table
+
+Created a `ticket_activities` table with the following columns:
+
+- `id`: Unique activity identifier
+- `ticket_id`: Related support ticket
+- `user_id`: User who performed the action
+- `action`: Activity type
+- `details`: Description of the action
+- `created_at`: Activity timestamp
+
+Supported activity types:
+- `assigned`
+- `unassigned`
+- `reassigned`
+- `status_changed`
+
+## 3. Ticket Comments
+
+Implemented the following route:
+
+`POST /tickets/<ticket_id>/comments`
+
+Features:
+- Authenticated users can submit comments.
+- Users can comment on their own tickets.
+- Admins can comment on any ticket.
+- IT Support staff can comment on assigned tickets.
+- Comments are displayed chronologically.
+- Each comment displays the author's name, role, and timestamp.
+
+## 4. Comment Security
+
+Implemented server-side validation:
+
+- Empty comments are rejected.
+- Comments longer than 2,000 characters are rejected.
+- Unauthorized comment requests return HTTP 403.
+- Invalid comment requests return HTTP 400.
+- Rejected comments are not saved to the database.
+
+## 5. Ticket Activity History
+
+Implemented automatic activity logging for:
+
+- Assigning tickets to IT Support
+- Removing ticket assignments
+- Reassigning tickets
+- Changing ticket status
+
+Activities are displayed on the Ticket Details page.
+
+Each activity includes:
+- User who performed the action
+- User role
+- Activity description
+- Timestamp
+
+Activity records are only created when an assignment or status actually changes.
+
+Ticket updates and activity records are saved in the same database transaction.
+
+## 6. Testing
+
+Successfully tested:
+
+- IT Support commenting on assigned tickets
+- IT Support being denied access to unassigned tickets
+- Regular Users commenting on their own tickets
+- Regular Users being denied access to other users' tickets
+- Admin commenting on tickets owned by other users
+- Empty comment validation
+- Maximum comment length validation
+- Unauthorized comments not being saved
+- Automatic assignment history logging
+- Automatic status change history logging
+- Activity History display
+- Test comment cleanup
+
+## 7. Files Updated
+
+- `database.py`: Added comments and ticket activity tables.
+- `app.py`: Added comment handling and activity logging.
+- `templates/ticket_detail.html`: Added Comments and Activity History sections.
+- `test_comments.py`: Added comment functionality and security tests.
+
+## 8. Skills Practised
+
+- Flask routes and HTTP methods
+- SQLite database relationships
+- SQL JOIN queries
+- Role-based access control (RBAC)
+- Input validation
+- Database transactions
+- Automated testing with Flask Test Client
+- Audit logging
+- HTML and Jinja2 templates
+
+## 9. Day 6 Outcome
+
+SmartDesk now supports ticket-based communication and records important ticket changes.
+
+The system provides improved collaboration between Users, Admins, and IT Support staff while maintaining role-based security.

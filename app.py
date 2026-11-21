@@ -187,13 +187,16 @@ def create_ticket():
     # Show the form when using GET
     return render_template("create_ticket.html")
 
+
 # Display details of a single ticket
 @app.route("/tickets/<int:ticket_id>")
 @login_required
 def ticket_detail(ticket_id):
     user_id = session["user_id"]
     connection = get_connection()
+
     try:
+        # Retrieve ticket details
         ticket = connection.execute("""
             SELECT t.*, creator.name AS created_by,
                    support.name AS assigned_to_name
@@ -202,66 +205,256 @@ def ticket_detail(ticket_id):
             LEFT JOIN users AS support ON support.id = t.assigned_to
             WHERE t.id = ?
         """, (ticket_id,)).fetchone()
+
         if ticket is None:
             abort(404)
+
+        # Retrieve current user's role
         user = connection.execute(
-            "SELECT role FROM users WHERE id = ?", (user_id,)
+            "SELECT role FROM users WHERE id = ?",
+            (user_id,)
         ).fetchone()
+
         if user is None:
             session.clear()
             return redirect(url_for("login"))
+
         current_role = user["role"]
+
+        # Check ticket access permissions
         is_assigned_support = (
-            current_role == "IT Support" and ticket["assigned_to"] == user_id
+            current_role == "IT Support"
+            and ticket["assigned_to"] == user_id
         )
-        if (ticket["user_id"] != user_id
-                and current_role != "Admin"
-                and not is_assigned_support):
+
+        if (
+            ticket["user_id"] != user_id
+            and current_role != "Admin"
+            and not is_assigned_support
+        ):
             abort(403)
+
+        # Retrieve IT Support users for Admin assignment
         support_users = []
+
         if current_role == "Admin":
             support_users = connection.execute("""
-                SELECT id, name FROM users
-                WHERE role = 'IT Support' ORDER BY name ASC
+                SELECT id, name
+                FROM users
+                WHERE role = 'IT Support'
+                ORDER BY name ASC
             """).fetchall()
+
+        # Day 6: Retrieve comments for this ticket
+        comments = connection.execute("""
+            SELECT
+                c.id,
+                c.content,
+                c.created_at,
+                c.user_id,
+                u.name AS author_name,
+                u.role AS author_role
+            FROM comments AS c
+            JOIN users AS u ON c.user_id = u.id
+            WHERE c.ticket_id = ?
+            ORDER BY c.created_at ASC, c.id ASC
+        """, (ticket_id,)).fetchall()
+
+        # Day 6: Retrieve activity history for this ticket
+        activities = connection.execute("""
+            SELECT
+                a.id,
+                a.action,
+                a.details,
+                a.created_at,
+                u.name AS performed_by,
+                u.role AS performer_role
+            FROM ticket_activities AS a
+            JOIN users AS u ON a.user_id = u.id
+            WHERE a.ticket_id = ?
+            ORDER BY a.created_at ASC, a.id ASC
+        """, (ticket_id,)).fetchall()
+
     finally:
         connection.close()
+
     return render_template(
-        "ticket_detail.html", ticket=ticket,
-        current_role=current_role, support_users=support_users,
-        can_update_status=(current_role == "Admin" or is_assigned_support)
+        "ticket_detail.html",
+        ticket=ticket,
+        current_role=current_role,
+        support_users=support_users,
+        can_update_status=(
+            current_role == "Admin" or is_assigned_support
+        ),
+        comments=comments,
+        activities=activities
     )
+
+
+
+@app.route("/tickets/<int:ticket_id>/comments", methods=["POST"])
+@login_required
+def add_comment(ticket_id):
+    user_id = session["user_id"]
+
+    # Get and validate the submitted comment
+    content = request.form.get("content", "").strip()
+
+    if not content:
+        abort(400)
+
+    if len(content) > 2000:
+        abort(400)
+
+    connection = get_connection()
+
+    try:
+        # Get the current user's role
+        user = connection.execute("""
+            SELECT role
+            FROM users
+            WHERE id = ?
+        """, (user_id,)).fetchone()
+
+        if user is None:
+            abort(403)
+
+        # Get ticket ownership and assignment
+        ticket = connection.execute("""
+            SELECT id, user_id, assigned_to
+            FROM tickets
+            WHERE id = ?
+        """, (ticket_id,)).fetchone()
+
+        if ticket is None:
+            abort(404)
+
+        # Check whether the user can access this ticket
+        is_owner = ticket["user_id"] == user_id
+        is_admin = user["role"] == "Admin"
+        is_assigned_support = (
+            user["role"] == "IT Support"
+            and ticket["assigned_to"] == user_id
+        )
+
+        if not (is_owner or is_admin or is_assigned_support):
+            abort(403)
+
+        # Save the comment
+        connection.execute("""
+            INSERT INTO comments (ticket_id, user_id, content)
+            VALUES (?, ?, ?)
+        """, (ticket_id, user_id, content))
+
+        connection.commit()
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+
+    return redirect(url_for("ticket_detail", ticket_id=ticket_id))
+
 
 
 # Update ticket status: only Admin or assigned IT Support
 @app.route("/tickets/<int:ticket_id>/status", methods=["POST"])
 @login_required
 def update_ticket_status(ticket_id):
+    user_id = session["user_id"]
+
+    # Validate the requested status
     new_status = request.form.get("status", "").strip()
+
     if new_status not in ("Open", "In Progress", "Resolved"):
         abort(400)
+
     connection = get_connection()
+
     try:
-        user = connection.execute(
-            "SELECT role FROM users WHERE id = ?", (session["user_id"],)
-        ).fetchone()
-        ticket = connection.execute(
-            "SELECT assigned_to FROM tickets WHERE id = ?", (ticket_id,)
-        ).fetchone()
+        # Retrieve the current user's role
+        user = connection.execute("""
+            SELECT role
+            FROM users
+            WHERE id = ?
+        """, (user_id,)).fetchone()
+
+        # Retrieve the ticket's current status and assignment
+        ticket = connection.execute("""
+            SELECT id, status, assigned_to
+            FROM tickets
+            WHERE id = ?
+        """, (ticket_id,)).fetchone()
+
         if ticket is None:
             abort(404)
-        if user is None or not (
-            user["role"] == "Admin" or
-            (user["role"] == "IT Support" and ticket["assigned_to"] == session["user_id"])
-        ):
-            abort(403)
-        connection.execute(
-            "UPDATE tickets SET status = ? WHERE id = ?", (new_status, ticket_id)
+
+        # Check permission to update ticket status
+        is_admin = (
+            user is not None
+            and user["role"] == "Admin"
         )
-        connection.commit()
+
+        is_assigned_support = (
+            user is not None
+            and user["role"] == "IT Support"
+            and ticket["assigned_to"] == user_id
+        )
+
+        if not (is_admin or is_assigned_support):
+            abort(403)
+
+        # Read the previous ticket status
+        old_status = ticket["status"]
+
+        # Only update when the status has changed
+        if old_status != new_status:
+
+            # Update ticket status
+            connection.execute("""
+                UPDATE tickets
+                SET status = ?
+                WHERE id = ?
+            """, (new_status, ticket_id))
+
+            # Prepare activity details
+            action = "status_changed"
+            details = (
+                f"Status changed from {old_status} "
+                f"to {new_status}"
+            )
+
+            # Record the status change
+            connection.execute("""
+                INSERT INTO ticket_activities (
+                    ticket_id,
+                    user_id,
+                    action,
+                    details
+                )
+                VALUES (?, ?, ?, ?)
+            """, (
+                ticket_id,
+                user_id,
+                action,
+                details
+            ))
+
+            # Save both changes in one transaction
+            connection.commit()
+
+    except Exception:
+        connection.rollback()
+        raise
+
     finally:
         connection.close()
-    return redirect(url_for("ticket_detail", ticket_id=ticket_id))
+
+    return redirect(
+        url_for("ticket_detail", ticket_id=ticket_id)
+    )
 
 
 @app.route("/tickets/<int:ticket_id>/assign", methods=["POST"])
@@ -271,25 +464,34 @@ def assign_ticket(ticket_id):
     connection = get_connection()
 
     try:
-        # Read the current role from the database, not the session
+        # Verify that the current user is an Admin
         current_user = connection.execute("""
-            SELECT role FROM users WHERE id = ?
+            SELECT role
+            FROM users
+            WHERE id = ?
         """, (user_id,)).fetchone()
 
         if current_user is None or current_user["role"] != "Admin":
             abort(403)
 
-        # Make sure the requested ticket exists
+        # Retrieve the ticket and its current assignment
         ticket = connection.execute("""
-            SELECT id FROM tickets WHERE id = ?
+            SELECT id, assigned_to
+            FROM tickets
+            WHERE id = ?
         """, (ticket_id,)).fetchone()
+
         if ticket is None:
             abort(404)
 
-        # Empty selection means remove the current assignment
+        previous_support_id = ticket["assigned_to"]
+
+        # Read the selected IT Support user
         selected_user = request.form.get("assigned_to", "").strip()
+
         if selected_user == "":
             support_id = None
+            support_name = None
         else:
             try:
                 support_id = int(selected_user)
@@ -299,22 +501,69 @@ def assign_ticket(ticket_id):
             if support_id <= 0:
                 abort(400, description="Invalid support user ID.")
 
-            # Assign tickets only to users with the IT Support role
+            # Only IT Support users can receive assignments
             support_user = connection.execute("""
-                SELECT id FROM users
+                SELECT id, name
+                FROM users
                 WHERE id = ? AND role = 'IT Support'
             """, (support_id,)).fetchone()
+
             if support_user is None:
                 abort(400, description="Selected user is not IT Support.")
 
-        connection.execute("""
-            UPDATE tickets SET assigned_to = ? WHERE id = ?
-        """, (support_id, ticket_id))
-        connection.commit()
+            support_name = support_user["name"]
+
+        # Only update the database if the assignment changed
+        if previous_support_id != support_id:
+
+            # Update ticket assignment
+            connection.execute("""
+                UPDATE tickets
+                SET assigned_to = ?
+                WHERE id = ?
+            """, (support_id, ticket_id))
+
+            # Determine the activity type
+            if support_id is None:
+                action = "unassigned"
+                details = "Ticket assignment removed"
+
+            elif previous_support_id is None:
+                action = "assigned"
+                details = f"Ticket assigned to {support_name}"
+
+            else:
+                action = "reassigned"
+                details = f"Ticket reassigned to {support_name}"
+
+            # Record the assignment activity
+            connection.execute("""
+                INSERT INTO ticket_activities (
+                    ticket_id,
+                    user_id,
+                    action,
+                    details
+                )
+                VALUES (?, ?, ?, ?)
+            """, (
+                ticket_id,
+                user_id,
+                action,
+                details
+            ))
+
+            # Save the assignment and activity together
+            connection.commit()
+
+    except Exception:
+        connection.rollback()
+        raise
+
     finally:
         connection.close()
 
     return redirect(url_for("ticket_detail", ticket_id=ticket_id))
+
 
 
 # Display and process the Edit Ticket form

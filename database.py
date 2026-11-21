@@ -97,6 +97,56 @@ def init_db():
                 "assigned_to column added."
             )
 
+        # Table 3: Comments
+        # Store messages related to support tickets
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (ticket_id)
+                    REFERENCES tickets(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id)
+                    REFERENCES users(id)
+            )
+        """)
+
+        # Index for faster comment retrieval by ticket
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_comments_ticket_id
+            ON comments(ticket_id)
+        """)
+
+        print("Comments table initialized successfully!")
+
+
+        # Table 4: Ticket Activity History
+        # Store important ticket actions and changes
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ticket_activities (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                action TEXT NOT NULL,
+                details TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (ticket_id)
+                    REFERENCES tickets(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id)
+                    REFERENCES users(id)
+            )
+        """)
+
+        # Index for faster activity history retrieval
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_activities_ticket_id
+            ON ticket_activities(ticket_id)
+        """)
+
+        print("Ticket activity history table initialized successfully!")
+
         # Add a demo user for testing
         # INSERT OR IGNORE prevents duplicate demo users
         cursor.execute("""
